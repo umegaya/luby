@@ -4,8 +4,17 @@ task :install do
 end
 task :test do
 	Dir.glob("test/*.rb") do |f|
-		p "run %s" % [f]
-		raise ("%s error" % [f]) unless system("bundle exec ruby src/main.rb %s" % [f])
+		puts "run %s" % [f]
+		expect = File.open(f.gsub(/rb$/, "expect")).read.split "\n"
+		out = `bundle exec ruby src/main.rb #{f}`
+		puts out
+		result = out.split "\n"
+		match = true
+		(-(expect.length)..-1).each do |i|
+			# p i, result[i], expect[i + expect.length]
+			match = false unless result[i] == expect[i + expect.length]
+		end
+		raise ("%s error" % [f]) unless (($?.success?) and match)
 	end
 end
 namespace :sbt do
