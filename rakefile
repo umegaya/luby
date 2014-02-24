@@ -19,6 +19,6 @@ namespace :sbt do
 		system("git subtree pull -P ext/lltk lltk lltk/#{DEV_BRANCH} --squash")
 	end
 	task :push do
-		system("git subtree push -P ext/lltk llt lltk/#{DEV_BRANCH} --squash")
+		system("git subtree push -P ext/lltk lltk lltk/#{DEV_BRANCH} --squash")
 	end
 end
