@@ -1,4 +1,4 @@
-package.path = package.path .. ";./ext/luajit-lang-toolkit/?.lua;"
+package.path = package.path .. ";./ext/lltk/?.lua;"
 local ast = require('lua-ast').New()
 local dump = require('syntax').dump
 local generator = require('generator')

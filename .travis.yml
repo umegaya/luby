@@ -1,0 +1,30 @@
+language: lua
+
+env:
+  - LUA=""
+  - LUA="luajit"
+
+compiler:
+  - gcc
+
+before_script:
+  - sudo mkdir -p /usr/local/share/lua/5.1/
+  - sudo chmod -R 777 /usr/local
+
+script: "rake install && rake test"
+
+branches:
+  only:
+    - master
+    - feature/travis_ci
+
+install:
+  - sudo apt-get install luarocks
+
+notifications:
+  recipients:
+    - iyatomi+luby.test@gmail.com
+  email:
+    on_success: change
+    on_failure: always
+
