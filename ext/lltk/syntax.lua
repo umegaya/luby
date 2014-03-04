@@ -574,7 +574,7 @@ dump = function (node)
          end
          out = (out.."},")
       else
-         out = (out..name.."="..node[name]..",")
+         out = (out..name.."="..tostring(node[name])..",")
       end
    end
    out = (out.."line="..tostring(node.line))

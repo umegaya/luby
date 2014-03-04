@@ -3,10 +3,12 @@ local parse = require('parser')
 local ast = require('lua-ast').New()
 local generator = require('generator')
 local reader = require('reader')
+local dump = require('syntax').dump
 
 local function compile(reader, filename)
     local ls = lex_setup(reader, filename)
     local tree = parse(ast, ls)
+    print(dump(tree))
     local luacode = generator(tree, filename)
 
     -- dump the bytecode

@@ -18,6 +18,49 @@ how it works
 
 
 
+how ruby-specified code converts
+================================
+- basic idea is last evaluate expression is value of if statement or block statement.
+- so move return or assignment to last evaluated expression.
+
+```
+a = b = c
+=>
+b = c
+a = b
+```
+
+```
+a = def f(x) p x end
+=>
+function f(x) print(x) end
+a = nil # in ruby it actually be nil
+```
+
+```
+a = if true then 1 else 2 end
+=>
+if true then a = 1 else a = 2 end
+```
+
+```
+return if true then 1 else 2 end
+=>
+if true then return 1 else return 2 end
+```
+
+```
+def fn
+  "string"
+end
+=>
+function fn()
+  return "string"
+end
+```
+
+
+
 how ruby state express in lua _G
 ================================
 

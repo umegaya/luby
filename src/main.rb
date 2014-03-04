@@ -7,5 +7,5 @@ puts "------ S exp   ------"
 p sexp
 ast = Luby::Compiler.new.compile sexp
 puts "------ lua AST ------"
-# puts ast
+puts ast
 system("luajit src/run.lua \"#{ast}\"")

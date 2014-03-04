@@ -180,6 +180,13 @@ function AST.fscope_end(ast)
     ast.current = ast.current.parent
 end
 
+function AST.scope(ast, fn)
+    ast:fscope_begin(ast)
+    local r = fn(ast)
+    ast:fscope_end(ast)
+    return r
+end
+
 local ASTClass = { __index = AST }
 
 local function new_ast()

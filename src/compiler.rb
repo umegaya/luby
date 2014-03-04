@@ -85,7 +85,7 @@ module Luby
 		end
 
 		def process_and(exp) # :nodoc:
-			parenthesize "#{process exp.shift} and #{process exp.shift}"
+			ast.expr_binop("and", process(exp.shift), process(exp.shift)).lineno exp.line
 		end
 
 		def process_arglist(exp) # custom made node # :nodoc:
@@ -175,13 +175,13 @@ module Luby
 			until exp.empty? do
 				code = exp.shift
 				if code.nil? or code.first == :nil then
-					result << "# do nothing\n"
+					result << ast.literal("# do nothing\n")
 				else
 					result << to_statement(process(code), code)
 				end
 			end
 
-			return ast.chunk(result, (line or 1))
+			return ast.chunk(result).lineno(line)
 		end
 
 		def process_block_pass exp # :nodoc:
@@ -201,7 +201,8 @@ module Luby
 		end
 
 		def to_statement(body, exp)
-			return ast.new_statement_expr(body, exp.line)
+			return body if body.is(:stmt)
+			return ast.new_statement_expr(body).lineno exp.line
 		end
 
 		def process_call(exp) # :nodoc:
@@ -233,40 +234,40 @@ module Luby
 			case name
 			when *BINARY then
 				if LUA_BINARY.include?(name) and args.length == 1 then # normal lua operator
-					ast.expr_binop(name, receiver, args[0], exp.line)
+					ast.expr_binop(name, receiver, args[0]).lineno exp.line
 				else # operator which lua does not have. regarded as function call.
-					ast.expr_method_call(receiver, ast.identifier(name), args, exp.line)
+					ast.expr_method_call(receiver, ast.identifier(name), args).lineno exp.line
 				end
 				# "(#{receiver} #{name} #{args.join(', ')})"
 			when :[] then
 				if args.length > 1 then 
 					# multiple args for [] is not supported in lua. so translate to normal function call which name is "[]".
-					ast.expr_method_call(receiver, ast.identifier("[]"), args, exp.line)
+					ast.expr_method_call(receiver, ast.identifier("[]"), args).lineno exp.line
 				else # normal index operation for lua
-					ast.expr_index(receiver, args[0], exp.line)
+					ast.expr_index(receiver, args[0]).lineno exp.line
 				end
 				# "#{receiver}[#{args.join(', ')}]"
 			when :[]= then
 				if args.length > 1 then 
 					rhs = args.pop
 					# multiple args for [] is not supported in lua. so translate to normal function call which name is "[]=".
-					ast.expr_method_call(receiver, ast.identifier("[]="), rhs, exp.line)
+					ast.expr_method_call(receiver, ast.identifier("[]="), rhs).lineno exp.line
 				else
 					rhs = args.pop
 					# index + assignment
-					ast.assignment_expr(ast.expr_index(receiver, args[0], exp.line), rhs, exp.line)
+					ast.assignment_expr(ast.expr_index(receiver, args[0]).lineno(exp.line), rhs).lineno exp.line
 				end
 			when :"!" then
-				ast.expr_unop('not', receiver, exp.line)
+				ast.expr_unop('not', receiver).lineno exp.line
 			when :"-@" then
-				ast.expr_unop('-', receiver, exp.line)
+				ast.expr_unop('-', receiver).lineno exp.line
 			when :"+@" then
-				ast.expr_method_call(receiver, ast.identifier('+@'), [], exp.line)
+				ast.expr_method_call(receiver, ast.identifier('+@'), []).lineno exp.line
 			else
 				if receiver then
-					ast.expr_method_call(receiver, ast.identifier(name), args, exp.line)
+					ast.expr_method_call(receiver, ast.identifier(name), args).lineno exp.line
 				else
-					ast.expr_function_call(ast.identifier(name), args, exp.line)
+					ast.expr_function_call(ast.identifier(name), args).lineno exp.line
 				end
 			end
 			ensure
@@ -518,33 +519,33 @@ module Luby
 			t = process exp.shift
 			f = process exp.shift
 
-			c = "(#{c.chomp})" if c =~ /\n/
+			#c = "(#{c.chomp})" if c =~ /\n/
 
 			if t then
 				unless expand then
 					if f then
-						r = "#{c} ? (#{t}) : (#{f})"
-						r = nil if r =~ /return/ # HACK - need contextual awareness or something
+						ast.if_stmt(c, t, f).lineno exp.line
+						# "#{c} ? (#{t}) : (#{f})"
 					else
-						r = "#{t} if #{c}"
+						ast.if_stmt(c, t).lineno exp.line
+						# "#{t} if #{c}"
 					end
-					return r if r and (@indent+r).size < LINE_LENGTH and r !~ /\n/
+				else
+					# r = "if #{c} then\n#{indent(t)}\n"
+					# r << "else\n#{indent(f)}\n" if f
+					# r << "end"
+					ast.if_stmt(c, t, f).lineno exp.line
 				end
 
-				r = "if #{c} then\n#{indent(t)}\n"
-				r << "else\n#{indent(f)}\n" if f
-				r << "end"
-
-				r
 			elsif f
 				unless expand then
-					r = "#{f} unless #{c}"
-					return r if (@indent+r).size < LINE_LENGTH and r !~ /\n/
+					ast.if_stmt(ast.expr_unop('not', c), f).lineno exp.line
+				else
+					ast.if_stmt(ast.expr_unop('not', c), f).lineno exp.line
 				end
-				"unless #{c} then\n#{indent(f)}\nend"
 			else
 				# empty if statement, just do it in case of side effects from condition
-				"if #{c} then\n#{indent '# do nothing'}\nend"
+				ast.literal(nil)
 			end
 		end
 
@@ -596,13 +597,26 @@ module Luby
 		end
 
 		def process_ivar(exp) # :nodoc:
-			exp.shift.to_s
+			ast.expr_property(ast.identifier("self"), exp.shift).lineno exp.line
+			#exp.shift.to_s
 		end
 
 		def process_lasgn(exp) # :nodoc:
-			s = "#{exp.shift}"
-			s += " = #{process exp.shift}" unless exp.empty?
-			s
+			sym = exp.shift
+			var = ast.identifier(sym)
+			decl = ast.local_decl([sym], []).lineno exp.line
+			expr = process exp.shift
+			#p "left:" + var.evaluate
+			#p "right:" + expr.evaluate
+			expr, changed = expr.each_last_expr do |e|
+				e.assign_to(ast, var, exp.line)
+			end
+			r = ast.tuple_stmt([decl, expr])
+			#p r.evaluate
+			return r
+			#s = "#{exp.shift}"
+			#s += " = #{process exp.shift}" unless exp.empty?
+			#s
 		end
 
 		def process_lit(exp) # :nodoc:
@@ -617,7 +631,7 @@ module Luby
 		end
 
 		def process_lvar(exp) # :nodoc:
-			exp.shift.to_s
+			ast.identifier(exp.shift)
 		end
 
 		def process_masgn(exp) # :nodoc:
@@ -847,7 +861,7 @@ module Luby
 		end
 
 		def process_true(exp) # :nodoc:
-			"true"
+			ast.literal(true)
 		end
 
 		def process_undef(exp) # :nodoc:

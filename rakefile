@@ -2,8 +2,12 @@ task :install do
 	system("bundle install --path=vendor/bundle --binstubs=bin")
 	system("sudo bash test/travis_install.sh")
 end
-task :test do
+task :test, :name do |t, args|
 	Dir.glob("test/*.rb") do |f|
+		if args[:name] and f[/^.*\/([^\/]+)\.rb$/, 1] != args[:name] then
+			puts "test is not #{args[:name]}. skip"
+			next
+		end
 		puts "run %s" % [f]
 		expect = File.open(f.gsub(/rb$/, "expect")).read.split "\n"
 		out = `bundle exec ruby src/main.rb #{f}`
