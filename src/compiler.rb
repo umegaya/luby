@@ -62,6 +62,7 @@ module Luby
 			self.expected = LAST::Node
 
 			@calls = []
+			@tmpvar_serial = 0
 			@last = LAST.new(defined? LUBY_VERSION)
 
 			# self.debug[:defn] = /zsuper/
@@ -457,7 +458,7 @@ module Luby
 		end
 
 		def process_false(exp) # :nodoc:
-			"false"
+			ast.literal(false)
 		end
 
 		def process_flip2(exp) # :nodoc:
@@ -513,39 +514,80 @@ module Luby
 			end
 		end
 
+		def tmpvar_name(exp)
+			@tmpvar_serial = (@tmpvar_serial + 1)
+			"tmp_#{exp.line}_#{@tmpvar_serial}"
+		end
 		def process_if(exp) # :nodoc:
+			# p exp
 			expand = ASSIGN_NODES.include? exp.first.first
 			c = process exp.shift
 			t = process exp.shift
 			f = process exp.shift
+
+			# p "c/t/f", c.to_s, t.to_s, f.to_s
+			# p c.evaluate
+
+			# if c then => tmp = c; if tmp then
+			name = tmpvar_name exp
+			tmpvar = ast.local_decl([name], []).lineno exp.line
+			sym = ast.identifier(name)
+			asgn = do_assign(exp, sym, c)
+
+			#p "asgn c to tmp:" + asgn.evaluate
+			#p f ? f.evaluate : "Nil"
 
 			#c = "(#{c.chomp})" if c =~ /\n/
 
 			if t then
 				unless expand then
 					if f then
-						ast.if_stmt(c, t, f).lineno exp.line
+						ast.tuple_stmt([
+							tmpvar,
+							asgn,
+							ast.if_stmt([sym], [t.blockize(ast)], f.blockize(ast)).lineno(exp.line)
+						])
 						# "#{c} ? (#{t}) : (#{f})"
 					else
-						ast.if_stmt(c, t).lineno exp.line
+						ast.tuple_stmt([
+							tmpvar,
+							asgn,
+							ast.if_stmt([sym], [t.blockize(ast)], nil).lineno(exp.line)
+						])
 						# "#{t} if #{c}"
 					end
 				else
 					# r = "if #{c} then\n#{indent(t)}\n"
 					# r << "else\n#{indent(f)}\n" if f
 					# r << "end"
-					ast.if_stmt(c, t, f).lineno exp.line
+					ast.tuple_stmt([
+						tmpvar,
+						asgn,
+						ast.if_stmt([sym], [t.blockize(ast)], f.blockize(ast)).lineno(exp.line)
+					])
 				end
 
 			elsif f
+				tests = [ast.expr_unop('not', sym)]
 				unless expand then
-					ast.if_stmt(ast.expr_unop('not', c), f).lineno exp.line
+					ast.tuple_stmt([
+						tmpvar,
+						asgn,
+						ast.if_stmt(tests, [f.blockize(ast)], nil).lineno(exp.line)
+					])
 				else
-					ast.if_stmt(ast.expr_unop('not', c), f).lineno exp.line
+					ast.tuple_stmt([
+						tmpvar,
+						asgn,
+						ast.if_stmt(tests, [f.blockize(ast)], nil).lineno(exp.line)
+					])
 				end
 			else
 				# empty if statement, just do it in case of side effects from condition
-				ast.literal(nil)
+				ast.tuple_stmt([
+					tmpvar,
+					asgn
+				])
 			end
 		end
 
@@ -601,6 +643,13 @@ module Luby
 			#exp.shift.to_s
 		end
 
+		def do_assign(exp, left, right)
+			result,changed = right.each_last_expr do |e|
+				e.assign_to(ast, left, exp.line)
+			end
+			return result
+		end
+
 		def process_lasgn(exp) # :nodoc:
 			sym = exp.shift
 			var = ast.identifier(sym)
@@ -608,9 +657,7 @@ module Luby
 			expr = process exp.shift
 			#p "left:" + var.evaluate
 			#p "right:" + expr.evaluate
-			expr, changed = expr.each_last_expr do |e|
-				e.assign_to(ast, var, exp.line)
-			end
+			expr, changed = do_assign exp, var, expr
 			r = ast.tuple_stmt([decl, expr])
 			#p r.evaluate
 			return r

@@ -1,2 +1,7 @@
 1
 1
+1
+2
+2
+-- AST --
+ast:scope(function (ast) return ast:chunk({ast:local_decl({'a'},{},1),ast:local_decl({'b'},{},1),ast:local_decl({'d'},{},1),ast:assignment_expr({ast:identifier('d')},{ast:literal(1)},1),ast:assignment_expr({ast:identifier('b')},{ast:identifier('d')},1),ast:assignment_expr({ast:identifier('a')},{ast:identifier('b')},1),ast:new_statement_expr(ast:expr_function_call(ast:identifier('print'),{ast:identifier('a')},2),2),ast:new_statement_expr(ast:expr_function_call(ast:identifier('print'),{ast:identifier('b')},3),3),ast:new_statement_expr(ast:expr_function_call(ast:identifier('print'),{ast:identifier('d')},4),4),ast:local_decl({'b'},{},5),ast:local_decl({'c'},{},5),ast:assignment_expr({ast:identifier('c')},{ast:literal(2)},5),ast:assignment_expr({ast:identifier('b')},{ast:identifier('c')},5),ast:new_statement_expr(ast:expr_function_call(ast:identifier('print'),{ast:identifier('b')},6),6),ast:new_statement_expr(ast:expr_function_call(ast:identifier('print'),{ast:identifier('c')},7),7)},1) end)

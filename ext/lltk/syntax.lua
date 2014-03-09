@@ -562,6 +562,9 @@ end
 
 local dump
 dump = function (node)
+   if type(node) ~= "table" then
+	return tostring(node)
+   end
    local meta = syntax[node.kind]
    local out = node.kind .. "{"
    for name, spec in pairs(meta.properties) do

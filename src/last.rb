@@ -17,6 +17,7 @@ module Luby
 			end
 		end
 		class Node 
+			TO_STR_PRETTY_PRINT = true
 			def initialize
 			end
 			def setup(m, args)
@@ -25,10 +26,27 @@ module Luby
 				@args = resolve_tuple(args, (is(:tuple_stmt) or is(:chunk) or is(:block_stmt)))
 				return self
 			end
+			def self.ln
+				TO_STR_PRETTY_PRINT ? "\n" : ""
+			end
 			def is(m)
 				return @m[m.to_s]
 			end
-			def type=(t)
+			def stmt?
+				is(:stmt) or 
+					is(:chunk) or 
+					is(:assignment_expr) or 
+					is(:function_decl) or 
+					is(:local_function_decl) or 
+					is(:new_statement_expr)
+			end
+			def expr?
+				(is(:expr) and (not is(:new_statement_expr))) or 
+					is(:identifier) or 
+					is(:concat_append) or 
+					is(:literal)
+			end
+			def set_type(t)
 				@m = t
 				self
 			end
@@ -46,7 +64,7 @@ module Luby
 						if flatten then
 							result = (result + a.args[0])
 						else
-							result.push(a.type = :block_stmt)
+							result.push(a.set_type(:block_stmt))
 						end
 					elsif a.is_a? Array then
 						result.push(resolve_tuple(a, flatten))
@@ -63,13 +81,18 @@ module Luby
 			# ruby requires evaluate chunk or statement which luajit VM not supports.
 			# instead of evaluating chunk, statement, find last expression and block do something
 			def each_last_expr(&block)
-				if is(:expr) or is(:literal) then
+				if expr? then
 					return block.call(self), true
 				end
 				if is(:if_stmt) then
+					#p "ifstmt:" + Node.to_str(self)
+					#p "then:" + Node.to_str(@args[1])
+					#p "else:" + Node.to_str(@args[2])
 					# search expression to both path.
-					@args[0].each_last_expr(&block) if @args[0].is_a? Node
-					@args[1].each_last_expr(&block) if @args[1].is_a? Node
+					@args[1].each do |a| 
+						a.each_last_expr(&block)
+					end
+					@args[2].each_last_expr(&block)
 					return self, false
 				end
 				parent = nil
@@ -104,7 +127,7 @@ module Luby
 						self,
 						ast.assignment_expr([exp], @args[0]).lineno(line)
 					])
-				elsif is(:expr) or is(:literal) then
+				elsif expr? then
 					ast.assignment_expr([exp], [self]).lineno(line)
 				else 
 					raise "invalid node to assign:" + @m
@@ -112,13 +135,27 @@ module Luby
 			end
 			def chunkize(last)
 				unless is(:chunk) then
-					body = is(:stmt) ? self : last.new_statement_expr(self, @line)
+					body = stmt? ? self : last.new_statement_expr(self).lineno(@line)
 					return last.newscope(last.chunk([body]))
 				end
 				return last.newscope(self)
 			end
+			def blockize(last)
+				unless is(:block_stmt) then
+					if is(:tuple_stmt) then
+						return set_type(:block_stmt)
+					elsif stmt?
+						return last.block_stmt([self]).lineno(@line)
+					else
+						return last.block_stmt([last.new_statement_expr(self)]).lineno(@line)
+					end
+				end
+				self
+			end
 			def self.to_str(a)
-				if a.is_a? String or a.is_a? Symbol then
+				if not a then
+					return a.nil? ? "nil" : "false"
+				elsif a.is_a? String or a.is_a? Symbol then
 					return "'#{a}'"
 				elsif a.is_a? Array then
 					r = "{"

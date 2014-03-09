@@ -10,13 +10,34 @@ task :test, :name do |t, args|
 		end
 		puts "run %s" % [f]
 		expect = File.open(f.gsub(/rb$/, "expect")).read.split "\n"
+		tmp = []
+		expect_ast = nil
+		expect.each_index do |i|
+			if expect[i] == "-- AST --" then
+				expect_ast = expect[i + 1]
+				break
+			end
+			tmp.push expect[i]
+		end
+		expect = tmp
 		out = `bundle exec ruby src/main.rb #{f}`
 		puts out
+		ast = nil
 		result = out.split "\n"
+		result.each_index do |i|
+			if result[i] == "------ lua AST ------" then
+				ast = result[i + 1]
+				break
+			end
+		end
 		match = true
+		expect_ast = nil
 		(-(expect.length)..-1).each do |i|
-			# p i, result[i], expect[i + expect.length]
+			#p i, result[i], expect[i + expect.length]
 			match = false unless result[i] == expect[i + expect.length]
+		end
+		if expect_ast and ast then
+			raise ("ast not match: %s %s" % [expect_ast, ast]) unless expect_ast == ast
 		end
 		raise ("%s error" % [f]) unless (($?.success?) and match)
 	end
