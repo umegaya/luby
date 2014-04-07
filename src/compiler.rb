@@ -102,17 +102,26 @@ module Luby
 
 		def process_args(exp) # :nodoc:
 			args = []
+			vararg = false
 
 			until exp.empty? do
 				arg = exp.shift
 				case arg
+				when String then
+					if arg[0] == '*' then
+						vararg = true
+						args << ast.identifier(arg.sub(1))
+					else
+						args << ast.identifier(arg)
+					end
 				when Symbol then
-					args << arg
+					args << ast.identifier(arg)
 				when Sexp then
 					case arg.first
 					when :lasgn then
-						args << process(arg)
-					when :masgn then
+						arg.shift # remove lasgn
+						args << ast.identifier(arg.shift) # store symbol name only
+					when :masgn then # TODO : think when it appears
 						args << process(arg)
 					else
 						raise "unknown arg type #{arg.first.inspect}"
@@ -122,7 +131,9 @@ module Luby
 				end
 			end
 
-			"(#{args.join ', '})"
+			# "(#{args.join ', '})"
+			args.insert(0, vararg)
+			ast.tuple_stmt(args)
 		end
 
 		def process_array(exp) # :nodoc:
@@ -220,10 +231,10 @@ module Luby
 
 			in_context :arglist do
 				until exp.empty? do
-					arg_type = exp.first.sexp_type
-					is_empty_hash = (exp.first == s(:hash))
+					#arg_type = exp.first.sexp_type
+					#is_empty_hash = (exp.first == s(:hash))
+					# p exp
 					arg = process exp.shift
-
 					args << arg
 				end
 			end
@@ -237,13 +248,13 @@ module Luby
 				if LUA_BINARY.include?(name) and args.length == 1 then # normal lua operator
 					ast.expr_binop(name, receiver, args[0]).lineno exp.line
 				else # operator which lua does not have. regarded as function call.
-					ast.expr_method_call(receiver, ast.identifier(name), args).lineno exp.line
+					ast.expr_method_call(receiver, name, args).lineno exp.line
 				end
 				# "(#{receiver} #{name} #{args.join(', ')})"
 			when :[] then
 				if args.length > 1 then 
 					# multiple args for [] is not supported in lua. so translate to normal function call which name is "[]".
-					ast.expr_method_call(receiver, ast.identifier("[]"), args).lineno exp.line
+					ast.expr_method_call(receiver, "[]", args).lineno exp.line
 				else # normal index operation for lua
 					ast.expr_index(receiver, args[0]).lineno exp.line
 				end
@@ -252,21 +263,21 @@ module Luby
 				if args.length > 1 then 
 					rhs = args.pop
 					# multiple args for [] is not supported in lua. so translate to normal function call which name is "[]=".
-					ast.expr_method_call(receiver, ast.identifier("[]="), rhs).lineno exp.line
+					ast.expr_method_call(receiver, "[]=", rhs).lineno exp.line
 				else
 					rhs = args.pop
 					# index + assignment
-					ast.assignment_expr(ast.expr_index(receiver, args[0]).lineno(exp.line), rhs).lineno exp.line
+					ast.assignment_expr([ast.expr_index(receiver, args[0]).lineno(exp.line)], [rhs]).lineno exp.line
 				end
 			when :"!" then
 				ast.expr_unop('not', receiver).lineno exp.line
 			when :"-@" then
 				ast.expr_unop('-', receiver).lineno exp.line
 			when :"+@" then
-				ast.expr_method_call(receiver, ast.identifier('+@'), []).lineno exp.line
+				ast.expr_method_call(receiver, "+@", []).lineno exp.line
 			else
 				if receiver then
-					ast.expr_method_call(receiver, ast.identifier(name), args).lineno exp.line
+					ast.expr_method_call(receiver, name, args).lineno exp.line
 				else
 					ast.expr_function_call(ast.identifier(name), args).lineno exp.line
 				end
@@ -297,19 +308,22 @@ module Luby
 			result.join("\n")
 		end
 
+		def add_constant(symbol_ast, value_ast)
+			# "#{lhs} = #{rhs}"
+			ast.expr_method_call(ast.identifier("self"), "const_set", [symbol_ast, value_ast])
+		end
 		def process_cdecl(exp) # :nodoc:
 			lhs = exp.shift
 			lhs = process lhs if Sexp === lhs
 			unless exp.empty? then
 				rhs = process(exp.shift)
-				"#{lhs} = #{rhs}"
-			else
-				lhs.to_s
 			end
+			add_constant(ast.identifier(lhs), rhs).lineno exp.line
 		end
 
 		def process_class(exp) # :nodoc:
-			"#{exp.comments}class #{util_module_or_class(exp, true)}"
+			# "#{exp.comments}class #{util_module_or_class(exp, true)}"
+			util_module_or_class(exp, true).lineno exp.line
 		end
 
 		def process_colon2(exp) # :nodoc:
@@ -321,11 +335,13 @@ module Luby
 		end
 
 		def process_const(exp) # :nodoc:
-			exp.shift.to_s
+			# exp.shift.to_s
+			ast.expr_method_call(ast.identifier("self"), "const_get", [ast.identifier(exp.shift)])
 		end
 
 		def process_cvar(exp) # :nodoc:
-			"#{exp.shift}"
+			# "#{exp.shift}"
+			ast.expr_property(ast.identifier("self"), exp.shift)
 		end
 
 		def process_cvasgn(exp) # :nodoc:
@@ -333,19 +349,21 @@ module Luby
 		end
 
 		def process_cvdecl(exp) # :nodoc:
-			"#{exp.shift} = #{process(exp.shift)}"
+			# "#{exp.shift} = #{process(exp.shift)}"
+			ast.assignment_expr([ast.expr_property(ast.identifier("self"), exp.shift)], [process(exp.shift)]).lineno exp.line
 		end
 
 		def process_defined(exp) # :nodoc:
 			"defined? #{process(exp.shift)}"
 		end
 
-		def process_defn(exp) # :nodoc:
+		def create_function(exp)
+			#p "create_fnction:" + exp.to_s
 			type1 = exp[1].first
 			type2 = exp[2].first rescue nil
 			expect = [:ivar, :iasgn, :attrset]
 
-			# s(name, args, ivar|iasgn|attrset)
+			# s(name, args, ivar|iasgn|attrset) TODO : think when it appears 
 			if exp.size == 3 and type1 == :args and expect.include? type2 then
 				name = exp.first # don't shift in case we pass through
 				case type2
@@ -381,34 +399,44 @@ module Luby
 
 			comm = exp.comments
 			name = exp.shift
-			args = process exp.shift
-			args = "" if args == "()"
+			tpl = process exp.shift ## invokes process_args
 
 			exp.shift if exp == s(s(:nil)) # empty it out of a default nil expression
 
 			# REFACTOR: use process_block but get it happier wrt parenthesize
 			body = []
 			until exp.empty? do
-				body << indent(process(exp.shift))
+				code = exp.shift
+				#p code
+				body << ast.new_statement_expr(process(code).lineno code.line)
 			end
 
-			body << indent("# do nothing") if body.empty?
+			args = tpl.args.first
+			vararg = args.shift
 
-			body = body.join("\n")
+			return ast.literal(name), ast.expr_function(args, ast.newscope(ast.block_stmt(body)), { :vararg => vararg }).lineno(exp.line)
+		end
 
-			return "#{comm}def #{name}#{args}\n#{body}\nend".gsub(/\n\s*\n+/, "\n")
+		def process_defn(exp) # :nodoc:
+
+
+			#body << indent("# do nothing") if body.empty?
+			
+			ast.expr_method_call(ast.identifier("self"), "define_method", create_function(exp))
+
+			#return "#{comm}def #{name}#{args}\n#{body}\nend".gsub(/\n\s*\n+/, "\n")
 		end
 
 		def process_defs(exp) # :nodoc:
 			lhs  = exp.shift
-			var = [:self, :cvar, :dvar, :ivar, :gvar, :lvar].include? lhs.first
-			name = exp.shift
+			#var = [:self, :cvar, :dvar, :ivar, :gvar, :lvar].include? lhs.first
+			lhs = process(lhs) #if lhs === Sexp
+			tmp = exp.shift
+			tmp = process(tmp) if tmp === Sexp
+			# lhs = "(#{lhs})" unless var
 
-			lhs = process(lhs)
-			lhs = "(#{lhs})" unless var
-
-			exp.unshift "#{lhs}.#{name}"
-			process_defn(exp)
+			exp.unshift tmp
+			ast.expr_method_call(ast.expr_index(lhs, ast.identifier(tmp)), "define_method", create_function(exp))
 		end
 
 		def process_dot2(exp) # :nodoc:
@@ -510,7 +538,9 @@ module Luby
 			if exp.empty? then # part of an masgn
 				lhs.to_s
 			else
-				"#{lhs} = #{process exp.shift}"
+				# "#{lhs} = #{process exp.shift}"
+				result, change = do_assign(exp, ast.expr_property(ast.identifier("self"), lhs, exp.line), (process exp.shift))
+				return result
 			end
 		end
 
@@ -683,7 +713,9 @@ module Luby
 
 		def process_masgn(exp) # :nodoc:
 			# s(:masgn, s(:array, s(:lasgn, :var), ...), s(:to_ary, <val>, ...))
+			# => ast:local_decl({'var1', 'var2', ...}, {<val1>, <val2>, ...})
 			# s(:iter, <call>, s(:args, s(:masgn, :a, :b)), <body>)
+			# => TODO: maybe after iter support is done.
 
 			case exp.first
 			when Sexp then
@@ -696,6 +728,7 @@ module Luby
 					lhs = lhs.map do |l|
 						case l.first
 						when :masgn then
+							# eg) a, (b, c), d = 1, 2, 3, 4π
 							"(#{process(l)})"
 						else
 							process(l)
@@ -745,7 +778,8 @@ module Luby
 		end
 
 		def process_module(exp) # :nodoc:
-			"#{exp.comments}module #{util_module_or_class(exp)}"
+			util_module_or_class(exp)
+			# "#{exp.comments}module #{util_module_or_class(exp)}"
 		end
 
 		def process_next(exp) # :nodoc:
@@ -874,7 +908,7 @@ module Luby
 		end
 
 		def process_self(exp) # :nodoc:
-			"self"
+			ast.identifier("self")
 		end
 
 		def process_splat(exp) # :nodoc:
@@ -886,7 +920,7 @@ module Luby
 		end
 
 		def process_str(exp) # :nodoc:
-			return exp.shift.dump
+			return ast.literal(exp.shift)
 		end
 
 		def process_super(exp) # :nodoc:
@@ -1145,31 +1179,23 @@ module Luby
 
 			name = exp.shift
 			name = process name if Sexp === name
-
-			result << name
-
-			if is_class then
-				superk = process(exp.shift)
-				result << " < #{superk}" if superk
-			end
-
-			result << "\n"
+			superk = process(exp.shift) if is_class
 
 			body = []
 			begin
-				code = process(exp.shift) unless exp.empty?
-				body << code.chomp unless code.nil? or code.chomp.empty?
+				body << ast.new_statement_expr(process(exp.shift)) unless exp.empty?
 			end until exp.empty?
 
-			unless body.empty? then
-				body = indent(body.join("\n\n")) + "\n"
+			body = ast.newscope(ast.block_stmt(body))
+			if is_class then
+				ast.expr_function_call(ast.identifier("class"), [ast.literal(name), ast.literal(superk),
+					ast.expr_function([ast.identifier("self")], body, {})
+				])
 			else
-				body = ""
+				ast.expr_function_call(ast.identifier("module"), [ast.literal(name),
+					ast.expr_function([ast.identifier("self")], body, {})
+				])
 			end
-			result << body
-			result << "end"
-
-			result.join
 		end
 	end
 end

@@ -79,7 +79,7 @@ module Luby
 				self
 			end
 			# ruby requires evaluate chunk or statement which luajit VM not supports.
-			# instead of evaluating chunk, statement, find last expression and block do something
+			# instead of evaluating chunk, statement, find last expression and block do something 
 			def each_last_expr(&block)
 				if expr? then
 					return block.call(self), true
@@ -119,7 +119,7 @@ module Luby
 				end
 				return self, false
 			end
-			# a = b = c => b = c; a = b
+			# e.g) a = b = c => b = c; a = b
 			def assign_to(ast, exp, line)
 				#p "assign_to----:" + evaluate + "|" + exp.evaluate
 				if is(:assignment_expr) then
@@ -166,6 +166,12 @@ module Luby
 						end
 					end
 					return r + "}"
+				elsif a.is_a? Hash then
+					r = "{"
+					a.each do |k,v| 
+						r = (r + k.to_s + "=" + Node.to_str(v) + ",")
+					end
+					return r + "}"					
 				elsif a.is_a? Node
 					return a.evaluate
 				else

@@ -59,6 +59,20 @@ function fn()
 end
 ```
 
+```
+class A
+function gn()
+   w + @x + @@y + Z
+end
+end
+=> 
+Object:const_set("A", class(Object, function (klass)
+    klass:define_method("gn", function (self)
+        return luby.lookup(self, "w") + self["@x"] + self.__class["@@y"] + self.__class:const_get("Z")
+    end)
+end))
+```
+
 
 
 how ruby state express in lua _G

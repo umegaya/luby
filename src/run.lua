@@ -1,7 +1,8 @@
-package.path = package.path .. ";./ext/lltk/?.lua;"
+package.path = package.path .. ";./ext/lltk/?.lua;./src/luby/?.lua;"
 local ast = require('lua-ast').New()
 local dump = require('syntax').dump
 local generator = require('generator')
+local luby = require('luby')
 
 local function compile(src)
 	local ast_builder,err = loadstring(([[
@@ -18,6 +19,7 @@ local function compile(src)
     -- dump the bytecode
     local jbc = require("jit.bc")
     local fn = assert(loadstring(luacode))
+    setfenv(fn, luby)
     jbc.dump(fn, nil, true)
 
     return luacode
