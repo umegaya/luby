@@ -31,9 +31,8 @@ task :test, :name do |t, args|
 			end
 		end
 		match = true
-		expect_ast = nil
 		(-(expect.length)..-1).each do |i|
-			#p i, result[i], expect[i + expect.length]
+			# p i, result[i], expect[i + expect.length]
 			match = false unless result[i] == expect[i + expect.length]
 		end
 		if expect_ast and ast then

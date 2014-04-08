@@ -192,8 +192,13 @@ module Luby
 					result << to_statement(process(code), code)
 				end
 			end
+			if code then
+				lastline = code.line
+			else
+				lastline = line
+			end
 
-			return ast.chunk(result).lineno(line)
+			return ast.chunk(result, "luby", line, lastline).lineno(line)
 		end
 
 		def process_block_pass exp # :nodoc:
@@ -358,6 +363,7 @@ module Luby
 		end
 
 		def create_function(exp)
+			firstline = exp.line
 			#p "create_fnction:" + exp.to_s
 			type1 = exp[1].first
 			type2 = exp[2].first rescue nil
@@ -410,11 +416,16 @@ module Luby
 				#p code
 				body << ast.new_statement_expr(process(code).lineno code.line)
 			end
+			if code then
+				lastline = (code.line + 1)
+			else
+				lastline = firstline + 1
+			end
 
 			args = tpl.args.first
 			vararg = args.shift
 
-			return ast.literal(name), ast.expr_function(args, ast.newscope(ast.block_stmt(body)), { :vararg => vararg }).lineno(exp.line)
+			return ast.literal(name), ast.expr_function(args, ast.newscope(ast.block_stmt(body, firstline, lastline)), { :vararg => vararg }).lineno(exp.line)
 		end
 
 		def process_defn(exp) # :nodoc:
@@ -1178,15 +1189,22 @@ module Luby
 			result = []
 
 			name = exp.shift
+			firstline = name.line
 			name = process name if Sexp === name
 			superk = process(exp.shift) if is_class
 
 			body = []
 			begin
-				body << ast.new_statement_expr(process(exp.shift)) unless exp.empty?
+				body << ast.new_statement_expr(process(tmp = exp.shift)) unless exp.empty?
 			end until exp.empty?
 
-			body = ast.newscope(ast.block_stmt(body))
+			if tmp then
+				lastline = (tmp.line + 1)
+			else
+				lastline = firstline + 1
+			end
+
+			body = ast.newscope(ast.block_stmt(body, firstline, lastline))
 			if is_class then
 				ast.expr_function_call(ast.identifier("class"), [ast.literal(name), ast.literal(superk),
 					ast.expr_function([ast.identifier("self")], body, {})

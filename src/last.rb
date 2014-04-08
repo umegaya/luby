@@ -78,6 +78,40 @@ module Luby
 				@line = no
 				self
 			end
+			def args 
+				@args
+			end
+			def get_lineno
+				@line
+			end
+			def self.linerange(node)
+				if not node.is_a? Node then
+					return nil,nil
+				end
+				min, max = node.get_lineno, node.get_lineno
+				node.args.each do |a|
+					if a.is_a? Node then
+						tmin,tmax = Node.linerange(a)
+						if tmin and ((not min) or (tmin < min)) then
+							min = tmin
+						end
+						if tmax and ((not max) or (tmax > max)) then
+							max = tmax
+						end	
+					elsif a.is_a? Array then
+						a.each do |aa|
+							tmin,tmax = Node.linerange(aa)
+							if tmin and ((not min) or (tmin < min)) then
+								min = tmin
+							end
+							if tmax and ((not max) or (tmax > max)) then
+								max = tmax
+							end	
+						end
+					end
+				end
+				return min,max
+			end
 			# ruby requires evaluate chunk or statement which luajit VM not supports.
 			# instead of evaluating chunk, statement, find last expression and block do something 
 			def each_last_expr(&block)
@@ -133,10 +167,17 @@ module Luby
 					raise "invalid node to assign:" + @m
 				end
 			end
-			def chunkize(last)
+			def chunkize(last, name = nil)
 				unless is(:chunk) then
-					body = stmt? ? self : last.new_statement_expr(self).lineno(@line)
-					return last.newscope(last.chunk([body]))
+					if stmt? then
+						body = self
+						firstline, lastline = Node.linerange(self)
+					else
+						body = last.new_statement_expr(self).lineno(@line)
+						firstline = lastline = @line
+					end
+					p "first/last:" + firstline.to_s + "|" + lastline.to_s
+					return last.newscope(last.chunk([body], (name or "luby"), firstline, lastline))
 				end
 				return last.newscope(self)
 			end
