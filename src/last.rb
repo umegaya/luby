@@ -84,10 +84,14 @@ module Luby
 			def get_lineno
 				@line
 			end
+			def kind
+				@m.to_s
+			end
 			def self.linerange(node)
 				if not node.is_a? Node then
 					return nil,nil
 				end
+				#p "nodekind:" + node.kind
 				min, max = node.get_lineno, node.get_lineno
 				node.args.each do |a|
 					if a.is_a? Node then
@@ -110,6 +114,7 @@ module Luby
 						end
 					end
 				end
+				#p "nodekind:" + node.kind + " result=" + min.to_s + "|" + max.to_s
 				return min,max
 			end
 			# ruby requires evaluate chunk or statement which luajit VM not supports.
@@ -174,7 +179,7 @@ module Luby
 						firstline, lastline = Node.linerange(self)
 					else
 						body = last.new_statement_expr(self).lineno(@line)
-						firstline = lastline = @line
+						firstline, lastline = Node.linerange(self)
 					end
 					p "first/last:" + firstline.to_s + "|" + lastline.to_s
 					return last.newscope(last.chunk([body], (name or "luby"), firstline, lastline))

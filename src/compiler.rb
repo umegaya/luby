@@ -417,9 +417,9 @@ module Luby
 				body << ast.new_statement_expr(process(code).lineno code.line)
 			end
 			if code then
-				lastline = (code.line + 1)
+				lastline = code.line
 			else
-				lastline = firstline + 1
+				lastline = firstline
 			end
 
 			args = tpl.args.first
@@ -1188,8 +1188,8 @@ module Luby
 		def util_module_or_class(exp, is_class=false)
 			result = []
 
+			firstline = exp.line
 			name = exp.shift
-			firstline = name.line
 			name = process name if Sexp === name
 			superk = process(exp.shift) if is_class
 
