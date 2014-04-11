@@ -1,3 +1,3 @@
 2
 -- AST --
-ast:scope(function (ast) return ast:chunk({ast:new_statement_expr(ast:expr_function_call(ast:identifier('print'),{ast:expr_binop('+',ast:literal(1),ast:literal(1),1)},1),1)},'luby',1,1) end)
+ast:scope(function (ast) return ast:chunk({ast:new_statement_expr(ast:expr_function_call(ast:expr_function_call(ast:identifier('self_indexer'),{ast:identifier('self'),ast:literal('print')}),{ast:identifier('self'),ast:expr_binop('+',ast:literal(1),ast:literal(1),1)},1),1)},'luby',1,1) end)

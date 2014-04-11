@@ -78,6 +78,11 @@ module Luby
 				@line = no
 				self
 			end
+			def range(first, last)
+				@first = first
+				@last = last
+				self
+			end
 			def args 
 				@args
 			end
@@ -120,6 +125,7 @@ module Luby
 			# ruby requires evaluate chunk or statement which luajit VM not supports.
 			# instead of evaluating chunk, statement, find last expression and block do something 
 			def each_last_expr(&block)
+				#p "each_last_expr:" + self.evaluate
 				if expr? then
 					return block.call(self), true
 				end
@@ -140,6 +146,7 @@ module Luby
 					parent = node
 					node = node.last
 				end
+				#p "each_last_expr2:" + Node.to_str(node)
 				if node.is_a? Node then
 					#p "node:" + node.evaluate
 					v, changed = node.each_last_expr(&block)
@@ -181,7 +188,7 @@ module Luby
 						body = last.new_statement_expr(self).lineno(@line)
 						firstline, lastline = Node.linerange(self)
 					end
-					p "first/last:" + firstline.to_s + "|" + lastline.to_s
+					# p "first/last:" + firstline.to_s + "|" + lastline.to_s
 					return last.newscope(last.chunk([body], (name or "luby"), firstline, lastline))
 				end
 				return last.newscope(self)
@@ -238,7 +245,9 @@ module Luby
 						r = (r + "," + Node.to_str(a))
 					end
 				end
-				if @line then
+				if @first and @last then
+					return (r + ",#{@first},#{@last})")
+				elsif @line then
 					return (r + ",#{@line})")
 				else
 					return (r + ")")

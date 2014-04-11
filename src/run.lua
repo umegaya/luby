@@ -3,6 +3,7 @@ local ast = require('lua-ast').New()
 local dump = require('syntax').dump
 local generator = require('generator')
 local luby = require('luby')
+local dumpbc = true
 
 local function compile(src)
 	local ast_builder,err = loadstring(([[
@@ -14,17 +15,16 @@ local function compile(src)
 	end
 	local tree = ast_builder(ast)
     print(dump(tree))
-    local luacode = generator(tree, "luby")
-
-    -- dump the bytecode
-    local jbc = require("jit.bc")
-    local fn = assert(loadstring(luacode))
-    setfenv(fn, luby)
-    jbc.dump(fn, nil, true)
-
-    return luacode
+    return generator(tree, "luby")
 end
 
 local luacode = compile(arg[1])
 local fn = assert(loadstring(luacode))
+setfenv(fn, luby)
+if dumpbc then
+    -- dump the bytecode
+    local jbc = require("jit.bc")
+    local fn = assert(loadstring(luacode))
+    jbc.dump(fn, nil, true)
+end
 fn()

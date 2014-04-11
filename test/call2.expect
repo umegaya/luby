@@ -1,3 +1,3 @@
 2
 -- AST --
-ast:scope(function (ast) return ast:chunk({ast:local_decl({'a'},{},1),ast:assignment_expr({ast:identifier('a')},{ast:literal(1)},1),ast:new_statement_expr(ast:expr_function_call(ast:identifier('print'),{ast:expr_binop('+',ast:identifier('a'),ast:literal(1),2)},2),2)},'luby',1,2,1) end)
+ast:scope(function (ast) return ast:chunk({ast:local_decl({'a'},{},1),ast:assignment_expr({ast:identifier('a')},{ast:literal(1)},1),ast:new_statement_expr(ast:expr_function_call(ast:expr_function_call(ast:identifier('self_indexer'),{ast:identifier('self'),ast:literal('print')}),{ast:identifier('self'),ast:expr_binop('+',ast:identifier('a'),ast:literal(1),2)},2),2)},'luby',1,2,1) end)

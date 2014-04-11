@@ -284,7 +284,8 @@ module Luby
 				if receiver then
 					ast.expr_method_call(receiver, name, args).lineno exp.line
 				else
-					ast.expr_function_call(ast.identifier(name), args).lineno exp.line
+					call_no_receiver(ast.identifier("self"), name, *args).lineno exp.line
+					# ast.expr_function_call(ast.identifier(name), args).lineno exp.line
 				end
 			end
 			ensure
@@ -315,7 +316,7 @@ module Luby
 
 		def add_constant(symbol_ast, value_ast)
 			# "#{lhs} = #{rhs}"
-			ast.expr_method_call(ast.identifier("self"), "const_set", [symbol_ast, value_ast])
+			call_no_receiver(ast.identifier("self"), "const_set", symbol_ast, value_ast)
 		end
 		def process_cdecl(exp) # :nodoc:
 			lhs = exp.shift
@@ -341,7 +342,8 @@ module Luby
 
 		def process_const(exp) # :nodoc:
 			# exp.shift.to_s
-			ast.expr_method_call(ast.identifier("self"), "const_get", [ast.identifier(exp.shift)])
+			# check subtree also
+			call_no_receiver(ast.identifier("self"), "const_get", ast.literal(exp.shift), ast.literal(true))
 		end
 
 		def process_cvar(exp) # :nodoc:
@@ -413,9 +415,12 @@ module Luby
 			body = []
 			until exp.empty? do
 				code = exp.shift
+				tmp = process(code).lineno code.line
 				#p code
-				body << ast.new_statement_expr(process(code).lineno code.line)
+
+				body << (tmp.expr? ? ast.new_statement_expr(tmp) : tmp)
 			end
+
 			if code then
 				lastline = code.line
 			else
@@ -425,15 +430,28 @@ module Luby
 			args = tpl.args.first
 			vararg = args.shift
 
-			return ast.literal(name), ast.expr_function(args, ast.newscope(ast.block_stmt(body, firstline, lastline)), { :vararg => vararg }).lineno(exp.line)
+			tmp = ast.block_stmt(body).range(firstline, lastline)
+			#p tmp
+			body_block,changed = tmp.each_last_expr do |e|
+				#p "last_expr:" + e.to_s
+				ast.return_stmt(e.is_a?(Array) ? e : [e]).lineno lastline
+			end
+			# p "expr_function:" + firstline.to_s + "|" + lastline.to_s
+
+			return ast.literal(name), ast.expr_function(args, ast.newscope(body_block), 
+				{ :vararg => vararg, :firstline => firstline, :lastline => lastline }).lineno(exp.line)
+		end
+
+		def call_no_receiver(this, method, *args)
+			ast.expr_function_call(ast.expr_function_call(ast.identifier("self_indexer"), [this, ast.literal(method)]), args.insert(0, this))
 		end
 
 		def process_defn(exp) # :nodoc:
 
 
 			#body << indent("# do nothing") if body.empty?
-			
-			ast.expr_method_call(ast.identifier("self"), "define_method", create_function(exp))
+			name, body = create_function(exp)
+			call_no_receiver(ast.identifier("self"), "define_method", name, body)
 
 			#return "#{comm}def #{name}#{args}\n#{body}\nend".gsub(/\n\s*\n+/, "\n")
 		end
@@ -447,7 +465,8 @@ module Luby
 			# lhs = "(#{lhs})" unless var
 
 			exp.unshift tmp
-			ast.expr_method_call(ast.expr_index(lhs, ast.identifier(tmp)), "define_method", create_function(exp))
+			name, body = create_function(exp)
+			call_no_receiver(ast.expr_index(lhs, ast.identifier(tmp)), "define_method", name, body)
 		end
 
 		def process_dot2(exp) # :nodoc:
@@ -1199,19 +1218,21 @@ module Luby
 			end until exp.empty?
 
 			if tmp then
-				lastline = (tmp.line + 1)
+				lastline = tmp.line
 			else
-				lastline = firstline + 1
+				lastline = firstline
 			end
 
-			body = ast.newscope(ast.block_stmt(body, firstline, lastline))
+			# p "util_module_or_class:" + firstline.to_s + "|" + lastline.to_s
+
+			body = ast.newscope(ast.block_stmt(body).range(firstline, lastline))
 			if is_class then
 				ast.expr_function_call(ast.identifier("class"), [ast.literal(name), ast.literal(superk),
-					ast.expr_function([ast.identifier("self")], body, {})
+					ast.expr_function([ast.identifier("self")], body, {:firstline => firstline, :lastline => lastline})
 				])
 			else
 				ast.expr_function_call(ast.identifier("module"), [ast.literal(name),
-					ast.expr_function([ast.identifier("self")], body, {})
+					ast.expr_function([ast.identifier("self")], body, {:firstline => firstline, :lastline => lastline})
 				])
 			end
 		end
