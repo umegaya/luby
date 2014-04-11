@@ -562,7 +562,11 @@ local function build(kind, props)
 end
 
 local dump
+-- TODO : pretty print
 dump = function (node)
+   if type(node) ~= "table" then
+	return tostring(node)
+   end
    local meta = syntax[node.kind]
    local out = node.kind .. "{"
    for name, spec in pairs(meta.properties) do
@@ -579,6 +583,9 @@ dump = function (node)
       end
    end
    out = (out.."line="..tostring(node.line))
+   if node.firstline or node.lastline then
+      out = (out..",range='"..tostring(node.firstline).."/"..tostring(node.lastline).."'")
+   end
    out = (out.."}")
    return out
 end
