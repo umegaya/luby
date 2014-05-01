@@ -16,6 +16,10 @@ end
 local flag_tainted = bit.lshift(1, 0)
 local flag_frozen = bit.lshift(1, 1)
 
+local failed_new = function (self)
+	luby.raise("TODO: TypeError: can't create instance of singleton class")
+end
+
 -- class body
 local Object = Class:new(BasicObject, function (klass)
 	klass.__name = "Object"
@@ -23,7 +27,7 @@ local Object = Class:new(BasicObject, function (klass)
 	klass.__methods = {
 		initialize = function (...)
 			BasicObject.initialize(self, ...)
-			self.__flags__ = 0
+			self.__flags = 0
 		end,
 		["!~"] = function (self, pattern)
 			return not self["=~"](pattern)
@@ -38,7 +42,8 @@ local Object = Class:new(BasicObject, function (klass)
 			return nil
 		end,
 		class = function (self)
-			return self.__class__
+			local c = rawget(self, "__class")
+			return (rawget(c, "__name") and c or rawget(c, "__superclass"))
 		end,
 		clone = function (self)
 			local klass = getmetatable(self)
@@ -52,8 +57,7 @@ local Object = Class:new(BasicObject, function (klass)
 			return setmetatable(copy, klass)
 		end,
 		define_singleton_method = function (self, symbol, proc)
-			local mt = getmetatable(self)
-			mt[symbol] = proc
+			self:singleton_class():define_method(symbol, proc)
 			self:singleton_method_added(symbol)
 			return proc
 		end,
@@ -69,22 +73,33 @@ local Object = Class:new(BasicObject, function (klass)
 			assert(false, "TODO: decide how to express enumerator in luby (pairs?)")
 		end,
 		extend = function (self, ...)
+			local c = self:singleton_class()
 			for i=1,select('#', ...),1 do
 				local mod = select(i, ...)
-				self.__class__:include(mod)
+				c:include(mod)
 			end
 		end,
 		freeze = function (self)
-			self.__flags.__ = setflag(self.__flags__, flag_frozen, on)
+			self.__flags = setflag(self.__flags, flag_frozen, on)
 			return self
 		end,
 		["frozen?"] = function (self)
-			return getflag(self.__flags__, flag_frozen)
+			return getflag(self.__flags, flag_frozen)
 		end,
 		["is_a?"] = function (self, klass)
-			return luby.traverse_inheritance_ladder(self.__class, function (c)
+			return luby.traverse_inheritance_ladder(self:class(), function (c)
 				return klass == c
 			end)
+		end,
+		singleton_class = function (self)
+			local c = self:class() 
+			if not c["singleton_class?"](c) then
+				c = luby.Class:new(self.__class, function (klass)
+					klass:define_method("new", failed_new)
+				end)
+				self.__class = c
+			end
+			return c
 		end,
 	}
 end)

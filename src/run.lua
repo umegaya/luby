@@ -6,10 +6,10 @@ local luby = require('luby')
 local dumpbc = true
 
 local function compile(src)
-	local ast_builder,err = loadstring(([[
+	local ast_builder,err = loadstring(string.format([[
         local ast = select(1,...)
         return %s
-    ]]):format(src))
+    ]], src))
 	if not ast_builder then
 		error(err)
 	end

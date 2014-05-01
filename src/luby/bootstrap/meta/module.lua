@@ -16,9 +16,9 @@ local Module = {
 					table.insert(ret, c)
 				end
 			end)
-			return luby.to_a(ret)
+			return luby.array(ret)
 		else
-			return self.__constants
+			return rawget(self, "__constants")
 		end
 	end,
 	nesting = function ()
@@ -26,15 +26,17 @@ local Module = {
 	-- public 
 	initialize = function (self, block)
 		-- TODO : need to call Object.initialize?
-		self.__cache = {}
-		self.__included = {}
-		self.__mixin = {}
-		self.__methods = {}
-		self.__constants = {}
-		self.__protect_levels = {}
-		self.__current_protect_level = false
+		rawset(self, "__cache", {})
+		rawset(self, "__included", {})
+		rawset(self, "__mixin", {})
+		rawset(self, "__methods", {})
+		rawset(self, "__aliases", {})
+		rawset(self, "__constants", {})
+		rawset(self, "__protect_levels", {})
+		rawset(self, "__cached_protect_levels", {})
+		-- rawset(self, "__current_protect_level", false)
 		if block then
-			block(self)
+			self:class_eval(block)
 		end
 	end,
 	["<"] = function (self, other)
@@ -55,31 +57,43 @@ local Module = {
 	end,
 	["autoload?"] = function (self, name)
 	end,
-	class_eval = function (self, block_or_expr, fname, lineno)
+	class_eval = function (self, code, fname, lineno)
+		-- TODO: apply fname and lineno as stack trace
+		table.insert(luby.nesting, self)
+		luby.last_eval = code(self)
+		table.remove(luby.nesting)
+		return luby.last_eval
 	end,
 	const_get = function (self, symbol, inherit)
-		local c = rawget(self.__cache, symbol)
+		local cache = rawget(self, "__cache")
+		local c = rawget(cache, symbol)
 		if c then return c end
+		if inherit == nil then 
+			inherit = true
+		end
 		c = (inherit and self:constants() or self.__constants)[symbol]
 		if c then 
-			rawset(self.__cache, symbol, c)
-			return c 
+			rawset(cache, symbol, c)
+			return c
 		end
-		if self.const_missing then
-			return self:const_missing(symbol)
-		else
-			error("NameError: uninitialized constant"..symbol)
-		end
+		return self:const_missing(symbol)
 	end,
 	const_set = function (self, symbol, body)
-	--print(self, symbol, body)
-		self.__constants[symbol] = body
+	-- print(self, symbol, body)
+		rawset(rawget(self, "__constants"), symbol, body)
 		if body["is_a?"](body, luby.Module) then
-			body.__name = symbol
+			rawset(body, "__name", symbol)
 		end
+		return body
+	end,
+	const_missing = function (self, symbol)
+		luby.raise("todo: NameError: uninitialized constant "..symbol)
 	end,
 	name = function (self)
-		return self.__name
+		return rawget(self, "__name")
+	end,
+	["singleton_class?"] = function (self)
+		return (rawget(self, "__name") ~= nil)
 	end,
 	--[[
 	class_variable_defined? 
@@ -106,12 +120,11 @@ local Module = {
 	]]--
 	-- private
 	alias_method = function (self, alias, symbol)
-		self.__methods[alias] = self.__methods[symbol]
-		self.__protect_levels[alias] = self.__protect_level[symbol]
+		self.__aliases[alias] = symbol
 	end,
 	define_method = function (self, symbol, block)
 		self.__methods[symbol] = block
-		self.__protect_levels[symbol] = self.__current_protect_level
+		self.__protect_levels[symbol] = rawget(self, "__current_protect_level")
 	end,
 	include = function (self, mod)
 		table.insert(self.__mixin, 1, mod)

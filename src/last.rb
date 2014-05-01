@@ -41,7 +41,7 @@ module Luby
 					is(:new_statement_expr)
 			end
 			def expr?
-				(is(:expr) and (not is(:new_statement_expr))) or 
+				(is(:expr) and (not is(:new_statement_expr)) and (not is(:assignment_expr))) or 
 					is(:identifier) or 
 					is(:concat_append) or 
 					is(:literal)
@@ -125,8 +125,12 @@ module Luby
 			# ruby requires evaluate chunk or statement which luajit VM not supports.
 			# instead of evaluating chunk, statement, find last expression and block do something 
 			def each_last_expr(&block)
+				each_last_expr_with(nil, &block)
+			end
+			def each_last_expr_with(with, &block)
 				#p "each_last_expr:" + self.evaluate
-				if expr? then
+				if expr? or (with and is(with)) then
+					#p "block called:" + self.evaluate
 					return block.call(self), true
 				end
 				if is(:if_stmt) then
@@ -146,11 +150,11 @@ module Luby
 					parent = node
 					node = node.last
 				end
-				#p "each_last_expr2:" + Node.to_str(node)
+				# p "each_last_expr2:" + Node.to_str(node)
 				if node.is_a? Node then
 					#p "node:" + node.evaluate
-					v, changed = node.each_last_expr(&block)
-					#if changed then
+					v, changed = node.each_last_expr_with(with, &block)
+					#if changed then	
 					#	p "changed:to: " + v.evaluate
 					#end
 					if changed then
@@ -164,6 +168,19 @@ module Luby
 					return self, changed
 				end
 				return self, false
+			end
+			def as_return_value(ast, line)
+				#p "arv:" + evaluate
+				if is(:assignment_expr) then
+					ast.tuple_stmt([
+						self,
+						ast.return_stmt(@args[0]).lineno(line)
+					])
+				elsif expr?
+					ast.return_stmt([self]).lineno(line)
+				else
+					raise "invalid node to return:" + @m
+				end
 			end
 			# e.g) a = b = c => b = c; a = b
 			def assign_to(ast, exp, line)

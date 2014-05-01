@@ -34,6 +34,10 @@ module Luby
 		BINARY = [:<=>, :==, :<, :>, :<=, :>=, :-, :+, :*, :/, :%, :<<, :>>, :**, :'!=']
 		LUA_BINARY = [:==, :<, :>, :<=, :>=, :-, :+, :*, :/, :%]
 
+		# self class of current scope
+		SELFK = "#selfk"
+
+
 		##
 		# Nodes that represent assignment and probably need () around them.
 		#
@@ -316,7 +320,7 @@ module Luby
 
 		def add_constant(symbol_ast, value_ast)
 			# "#{lhs} = #{rhs}"
-			call_no_receiver(ast.identifier("self"), "const_set", symbol_ast, value_ast)
+			call_no_receiver(ast.identifier(SELFK), "const_set", symbol_ast, value_ast)
 		end
 		def process_cdecl(exp) # :nodoc:
 			lhs = exp.shift
@@ -324,7 +328,7 @@ module Luby
 			unless exp.empty? then
 				rhs = process(exp.shift)
 			end
-			add_constant(ast.identifier(lhs), rhs).lineno exp.line
+			add_constant(ast.literal(lhs), rhs).lineno exp.line
 		end
 
 		def process_class(exp) # :nodoc:
@@ -343,7 +347,7 @@ module Luby
 		def process_const(exp) # :nodoc:
 			# exp.shift.to_s
 			# check subtree also
-			call_no_receiver(ast.identifier("self"), "const_get", ast.literal(exp.shift), ast.literal(true))
+			call_no_receiver(ast.identifier(SELFK), "const_get", ast.literal(exp.shift), ast.literal(true))
 		end
 
 		def process_cvar(exp) # :nodoc:
@@ -431,10 +435,10 @@ module Luby
 			vararg = args.shift
 
 			tmp = ast.block_stmt(body).range(firstline, lastline)
-			#p tmp
-			body_block,changed = tmp.each_last_expr do |e|
+			# p tmp.evaluate
+			body_block,changed = tmp.each_last_expr_with(:assignment_expr) do |e|
 				#p "last_expr:" + e.to_s
-				ast.return_stmt(e.is_a?(Array) ? e : [e]).lineno lastline
+				e.as_return_value(ast, lastline)
 			end
 			# p "expr_function:" + firstline.to_s + "|" + lastline.to_s
 
@@ -466,7 +470,7 @@ module Luby
 
 			exp.unshift tmp
 			name, body = create_function(exp)
-			call_no_receiver(ast.expr_index(lhs, ast.identifier(tmp)), "define_method", name, body)
+			call_no_receiver(ast.expr_index(lhs, ast.literal(tmp)), "define_method", name, body)
 		end
 
 		def process_dot2(exp) # :nodoc:
@@ -1213,6 +1217,7 @@ module Luby
 			superk = process(exp.shift) if is_class
 
 			body = []
+			body << (ast.local_decl([SELFK], [ast.identifier("self")]).lineno firstline)
 			begin
 				body << ast.new_statement_expr(process(tmp = exp.shift)) unless exp.empty?
 			end until exp.empty?

@@ -7,18 +7,16 @@ local Class = {
 	initialize = function (self, superclass, block)
 		Module.initialize(self, false)
 		if superclass ~= false then
-			self.__superclass = (superclass or Module.const_get("Object"))
+			self.__superclass = (superclass or luby.Object)
 			self:include(self.__superclass)
 			self.__superclass.inherited(self)
-		else
-			self.__superclass = false -- BasicObject
 		end
 		if block then
-			block(self)
+			self:class_eval(block)
 		end
 	end,
 	superclass = function (self) 
-		return self.__superclass or nil
+		return rawget(self, "__superclass")
 	end,
 	allocate = luby.allocator,
 	inherited = function (successor)
